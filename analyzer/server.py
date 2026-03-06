@@ -112,7 +112,12 @@ def start_server(config, report=None):
     _config = config
     _current_report = report
 
-    server = HTTPServer(("0.0.0.0", config["port"]), AnalyzerHandler)
+    import socket
+    class ReusableHTTPServer(HTTPServer):
+        allow_reuse_address = True
+        address_family = socket.AF_INET
+
+    server = ReusableHTTPServer(("0.0.0.0", config["port"]), AnalyzerHandler)
     print(f"Server running at http://localhost:{config['port']}")
     print("Press Ctrl+C to stop")
     try:
