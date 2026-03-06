@@ -5,6 +5,7 @@ let sizeChart = null;
 // Init
 document.addEventListener('DOMContentLoaded', async () => {
     setupTabs();
+    initApkCompare();
     await loadReport();
 });
 
@@ -491,6 +492,166 @@ function renderDiffResult(diff) {
     }
 
     el.innerHTML = html;
+}
+
+// === APK COMPARE ===
+function initApkCompare() {
+    const el = document.getElementById('tab-apk');
+    el.innerHTML = `
+        <div class="card" style="max-width:600px;margin-bottom:24px">
+            <h3 style="margin-bottom:16px;font-size:16px">Compare Two APK Files</h3>
+            <div style="display:flex;flex-direction:column;gap:12px">
+                <div>
+                    <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">Old APK</label>
+                    <input type="file" id="old-apk" accept=".apk,.aab" style="font-size:13px;color:var(--text)">
+                </div>
+                <div>
+                    <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">New APK</label>
+                    <input type="file" id="new-apk" accept=".apk,.aab" style="font-size:13px;color:var(--text)">
+                </div>
+                <button id="apk-compare-btn" onclick="runApkCompare()">Compare</button>
+            </div>
+        </div>
+        <div id="apk-result"></div>
+    `;
+}
+
+async function runApkCompare() {
+    const oldFile = document.getElementById('old-apk').files[0];
+    const newFile = document.getElementById('new-apk').files[0];
+    if (!oldFile || !newFile) { alert('Select both APK files'); return; }
+
+    const btn = document.getElementById('apk-compare-btn');
+    btn.textContent = 'Comparing...';
+    btn.disabled = true;
+
+    try {
+        const form = new FormData();
+        form.append('old_apk', oldFile);
+        form.append('new_apk', newFile);
+        const resp = await fetch('/api/apk-compare', { method: 'POST', body: form });
+        const data = await resp.json();
+        renderApkResult(data);
+    } finally {
+        btn.textContent = 'Compare';
+        btn.disabled = false;
+    }
+}
+
+function renderApkResult(data) {
+    const el = document.getElementById('apk-result');
+    if (data.error) { el.innerHTML = `<p style="color:var(--red)">${data.error}</p>`; return; }
+
+    const deltaClass = data.total_delta > 0 ? 'delta-positive' : data.total_delta < 0 ? 'delta-negative' : 'delta-zero';
+    const deltaSign = data.total_delta > 0 ? '+' : '';
+
+    let html = `
+        <div class="cards">
+            <div class="card">
+                <div class="card-label">Old APK</div>
+                <div class="card-value">${formatBytes(data.old_total)}</div>
+                <div class="card-sub">${data.old_name} (${data.total_files_old} files)</div>
+            </div>
+            <div class="card">
+                <div class="card-label">New APK</div>
+                <div class="card-value">${formatBytes(data.new_total)}</div>
+                <div class="card-sub">${data.new_name} (${data.total_files_new} files)</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Size Change</div>
+                <div class="card-value ${deltaClass}">${deltaSign}${formatBytes(data.total_delta)}</div>
+                <div class="card-sub">${data.added} added, ${data.removed} removed, ${data.changed} changed</div>
+            </div>
+        </div>
+
+        <h3 style="margin-bottom:12px">Category Breakdown</h3>
+        <table style="margin-bottom:24px">
+            <thead><tr><th>Category</th><th>Old Size</th><th>New Size</th><th>Delta</th></tr></thead>
+            <tbody>
+                ${data.categories.map(c => {
+                    const cls = c.delta > 0 ? 'delta-positive' : c.delta < 0 ? 'delta-negative' : 'delta-zero';
+                    return `<tr>
+                        <td>${c.category}</td>
+                        <td>${formatBytes(c.old_size)}</td>
+                        <td>${formatBytes(c.new_size)}</td>
+                        <td class="${cls}">${c.delta > 0 ? '+' : ''}${formatBytes(c.delta)}</td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>
+
+        <div class="filter-row">
+            <input class="search-box" placeholder="Search files..." oninput="filterApkChanges(this.value)">
+            <button class="filter-btn active" onclick="toggleApkFilter(this,'all')">All (${data.changes.length})</button>
+            <button class="filter-btn" onclick="toggleApkFilter(this,'added')">Added (${data.added})</button>
+            <button class="filter-btn" onclick="toggleApkFilter(this,'removed')">Removed (${data.removed})</button>
+        </div>
+        <table id="apk-changes-table">
+            <thead><tr>
+                <th onclick="sortApkTable(0)">File</th>
+                <th onclick="sortApkTable(1)">Category</th>
+                <th onclick="sortApkTable(2)">Old Size</th>
+                <th onclick="sortApkTable(3)">New Size</th>
+                <th onclick="sortApkTable(4)" class="sorted-desc">Delta</th>
+                <th>Status</th>
+            </tr></thead>
+            <tbody>
+                ${data.changes.map(c => {
+                    const cls = c.delta > 0 ? 'delta-positive' : c.delta < 0 ? 'delta-negative' : 'delta-zero';
+                    const statusTag = c.status === 'added' ? '<span class="tag tag-remote">NEW</span>'
+                        : c.status === 'removed' ? '<span class="tag tag-danger">REMOVED</span>'
+                        : '<span class="tag">CHANGED</span>';
+                    return `<tr class="apk-row" data-search="${c.name.toLowerCase()}" data-status="${c.status}" data-delta="${Math.abs(c.delta)}">
+                        <td style="font-size:12px;word-break:break-all">${c.name}</td>
+                        <td style="font-size:12px">${c.category}</td>
+                        <td data-sort="${c.old_size}">${formatBytes(c.old_size)}</td>
+                        <td data-sort="${c.new_size}">${formatBytes(c.new_size)}</td>
+                        <td data-sort="${c.delta}" class="${cls}">${c.delta > 0 ? '+' : ''}${formatBytes(c.delta)}</td>
+                        <td>${statusTag}</td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>
+    `;
+
+    el.innerHTML = html;
+}
+
+let apkFilterMode = 'all';
+function toggleApkFilter(btn, mode) {
+    apkFilterMode = mode;
+    document.querySelectorAll('#tab-apk .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterApkChanges(document.querySelector('#tab-apk .search-box')?.value || '');
+}
+
+function filterApkChanges(query) {
+    const q = query.toLowerCase();
+    document.querySelectorAll('.apk-row').forEach(row => {
+        const matchSearch = !q || row.dataset.search.includes(q);
+        const matchFilter = apkFilterMode === 'all' || row.dataset.status === apkFilterMode;
+        row.style.display = matchSearch && matchFilter ? '' : 'none';
+    });
+}
+
+function sortApkTable(colIndex) {
+    const table = document.getElementById('apk-changes-table');
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const th = table.querySelectorAll('th')[colIndex];
+    const asc = !th.classList.contains('sorted-asc');
+
+    table.querySelectorAll('th').forEach(t => { t.classList.remove('sorted-asc', 'sorted-desc'); });
+    th.classList.add(asc ? 'sorted-asc' : 'sorted-desc');
+
+    rows.sort((a, b) => {
+        let aVal = a.cells[colIndex].dataset.sort || a.cells[colIndex].textContent;
+        let bVal = b.cells[colIndex].dataset.sort || b.cells[colIndex].textContent;
+        const aNum = parseFloat(aVal), bNum = parseFloat(bVal);
+        if (!isNaN(aNum) && !isNaN(bNum)) return asc ? aNum - bNum : bNum - aNum;
+        return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
+    rows.forEach(r => tbody.appendChild(r));
 }
 
 // === HELPERS ===
