@@ -53,37 +53,42 @@ class AnalyzerHandler(SimpleHTTPRequestHandler):
             self._json_response({"error": "Need multipart/form-data"}, 400)
             return
 
-        import cgi
         import tempfile
-        form = cgi.FieldStorage(
-            fp=self.rfile,
-            headers=self.headers,
-            environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": content_type},
-        )
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+        except Exception as e:
+            self._json_response({"error": f"Failed to read upload: {e}"}, 400)
+            return
 
-        old_file = form["old_apk"]
-        new_file = form["new_apk"]
+        boundary = content_type.split("boundary=")[-1].encode()
+        parts = _parse_multipart(body, boundary)
 
-        if not old_file.file or not new_file.file:
+        if "old_apk" not in parts or "new_apk" not in parts:
             self._json_response({"error": "Need both old_apk and new_apk files"}, 400)
             return
 
-        with tempfile.NamedTemporaryFile(suffix=".apk", delete=False) as tmp_old, \
-             tempfile.NamedTemporaryFile(suffix=".apk", delete=False) as tmp_new:
-            tmp_old.write(old_file.file.read())
-            tmp_new.write(new_file.file.read())
-            tmp_old_path = tmp_old.name
-            tmp_new_path = tmp_new.name
-
+        tmp_old_path = tmp_new_path = None
         try:
+            with tempfile.NamedTemporaryFile(suffix=".apk", delete=False) as tmp_old:
+                tmp_old.write(parts["old_apk"]["data"])
+                tmp_old_path = tmp_old.name
+            with tempfile.NamedTemporaryFile(suffix=".apk", delete=False) as tmp_new:
+                tmp_new.write(parts["new_apk"]["data"])
+                tmp_new_path = tmp_new.name
+
             from analyzer.apk_compare import compare_apks
             result = compare_apks(tmp_old_path, tmp_new_path)
-            result["old_name"] = old_file.filename
-            result["new_name"] = new_file.filename
+            result["old_name"] = parts["old_apk"].get("filename", "old.apk")
+            result["new_name"] = parts["new_apk"].get("filename", "new.apk")
             self._json_response(result)
+        except Exception as e:
+            self._json_response({"error": str(e)}, 500)
         finally:
-            os.unlink(tmp_old_path)
-            os.unlink(tmp_new_path)
+            if tmp_old_path and os.path.exists(tmp_old_path):
+                os.unlink(tmp_old_path)
+            if tmp_new_path and os.path.exists(tmp_new_path):
+                os.unlink(tmp_new_path)
 
     def _handle_diff(self, query):
         a_path = query.get("a", [None])[0]
@@ -145,6 +150,34 @@ class AnalyzerHandler(SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
+
+
+def _parse_multipart(body, boundary):
+    """Parse multipart/form-data body into {field_name: {data, filename}}."""
+    parts = {}
+    delimiter = b"--" + boundary
+    segments = body.split(delimiter)
+    for segment in segments:
+        if segment in (b"", b"--\r\n", b"--"):
+            continue
+        if b"\r\n\r\n" not in segment:
+            continue
+        header_part, data = segment.split(b"\r\n\r\n", 1)
+        if data.endswith(b"\r\n"):
+            data = data[:-2]
+        headers = header_part.decode("utf-8", errors="ignore")
+        name = filename = None
+        for line in headers.split("\r\n"):
+            if "Content-Disposition" in line:
+                for part in line.split(";"):
+                    part = part.strip()
+                    if part.startswith("name="):
+                        name = part.split("=")[1].strip('"')
+                    elif part.startswith("filename="):
+                        filename = part.split("=")[1].strip('"')
+        if name:
+            parts[name] = {"data": data, "filename": filename or ""}
+    return parts
 
 
 def start_server(config, report=None):
