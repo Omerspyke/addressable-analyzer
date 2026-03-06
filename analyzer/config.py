@@ -1,32 +1,41 @@
 import json
 import os
 
-DEFAULT_CONFIG = {
-    "project_name": "",
+CONFIG_FILE = ".addressable-analyzer.json"
+
+DEFAULTS = {
     "buildlayout_path": "Library/com.unity.addressables/buildlayout.json",
     "reports_dir": os.path.expanduser("~/.addressable-analyzer/reports"),
-    "port": 8080
+    "port": 8080,
 }
-
-CONFIG_FILE = "config.json"
 
 
 def load_config(project_dir=None):
-    config = DEFAULT_CONFIG.copy()
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
+    project_dir = project_dir or os.getcwd()
+    config = DEFAULTS.copy()
+    config_path = os.path.join(project_dir, CONFIG_FILE)
+
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
             config.update(json.load(f))
-    if not config["project_name"]:
-        config["project_name"] = _detect_project_name(project_dir or os.getcwd())
-    if project_dir and not os.path.isabs(config["buildlayout_path"]):
+
+    if not config.get("project_name"):
+        config["project_name"] = _detect_project_name(project_dir)
+
+    if not os.path.isabs(config["buildlayout_path"]):
         config["buildlayout_path"] = os.path.join(project_dir, config["buildlayout_path"])
+
     return config
 
 
-def save_default_config():
-    if not os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2)
+def save_config(project_dir=None):
+    """Create default config in Unity project dir if not exists."""
+    project_dir = project_dir or os.getcwd()
+    config_path = os.path.join(project_dir, CONFIG_FILE)
+    if not os.path.exists(config_path):
+        with open(config_path, "w") as f:
+            json.dump(DEFAULTS, f, indent=2)
+        print(f"Config created: {config_path}")
 
 
 def _detect_project_name(project_dir):
