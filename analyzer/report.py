@@ -25,26 +25,29 @@ def generate_report(parsed_data):
             dep_bundle = bundle_lookup.get(dep_name, {})
             dep_is_remote = dep_bundle.get("is_remote", False)
 
-            # Remote → Remote: cache race condition risk
+            # Remote → Remote: only warn if DIFFERENT groups
             if bundle["is_remote"] and dep_is_remote:
+                dep_group = _find_group_for_bundle(parsed_data["groups"], dep_name)
                 cross_deps.append({
                     "from_bundle": bundle["name"],
                     "from_group": bundle["group"],
                     "to_bundle": dep_name,
-                    "to_group": _find_group_for_bundle(parsed_data["groups"], dep_name),
+                    "to_group": dep_group,
                     "efficiency": dep["efficiency"],
                 })
-                warnings.append({
-                    "severity": "high",
-                    "type": "remote_to_remote",
-                    "title": "Remote depends on Remote",
-                    "description": f"Remote bundle depends on another remote bundle. "
-                                   f"If both download concurrently, cache race condition "
-                                   f"can cause 'Couldn\\'t move cache data' crashes.",
-                    "from_bundle": bundle["name"],
-                    "from_group": bundle["group"],
-                    "to_bundle": dep_name,
-                    "to_group": _find_group_for_bundle(parsed_data["groups"], dep_name),
+                # Same group dependencies are normal (PackSeparately bundles)
+                if bundle["group"] != dep_group:
+                    warnings.append({
+                        "severity": "high",
+                        "type": "remote_to_remote",
+                        "title": "Remote depends on Remote",
+                        "description": f"Remote bundle depends on a different remote group's bundle. "
+                                       f"If both download concurrently, cache race condition "
+                                       f"can cause 'Couldn\\'t move cache data' crashes.",
+                        "from_bundle": bundle["name"],
+                        "from_group": bundle["group"],
+                        "to_bundle": dep_name,
+                        "to_group": dep_group,
                 })
 
             # Local → Remote: local can't load until remote is downloaded
