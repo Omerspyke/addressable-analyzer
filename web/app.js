@@ -371,9 +371,13 @@ function renderDiffSelectors() {
         return;
     }
 
-    const options = reportsListData.map((r, i) =>
-        `<option value="${r.filepath}">${r.filename} (${r.build_target}, ${r.summary.total_bundles || '?'} bundles)</option>`
-    ).join('');
+    const options = reportsListData.map((r, i) => {
+        const time = r.build_time || r.analyzed_at || r.filename;
+        const target = r.build_target || '?';
+        const bundles = r.summary.total_bundles || '?';
+        const size = r.summary.total_size ? formatBytes(r.summary.total_size) : '?';
+        return `<option value="${r.filepath}">${time} — ${target} (${bundles} bundles, ${size})</option>`;
+    }).join('');
 
     el.innerHTML = `
         <div class="select-row">

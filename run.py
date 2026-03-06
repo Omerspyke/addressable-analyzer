@@ -37,8 +37,11 @@ def main():
 
     from analyzer.parser import parse_build_layout
     from analyzer.report import generate_report
-    from analyzer.storage import save_report
+    from analyzer.storage import save_report, import_build_reports
     from analyzer.server import start_server
+
+    # Import any existing Unity BuildReports for history
+    import_build_reports(config)
 
     report = generate_report(parse_build_layout(layout_path))
     report["project_name"] = config["project_name"]
