@@ -34,6 +34,7 @@ def generate_report(parsed_data):
                     "to_bundle": dep_name,
                     "to_group": dep_group,
                     "efficiency": dep["efficiency"],
+                    "asset_dependencies": dep.get("asset_dependencies", []),
                 })
                 # Same group dependencies are normal (PackSeparately bundles)
                 if bundle["group"] != dep_group:

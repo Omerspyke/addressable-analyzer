@@ -207,15 +207,21 @@ function filterDuplicates(query) {
 function renderDependencies() {
     const el = document.getElementById('tab-dependencies');
     const crossDeps = reportData.cross_dependencies;
+    const crossLookup = {};
+    crossDeps.forEach(c => { crossLookup[c.from_bundle + '→' + c.to_bundle] = c; });
+
     const allDeps = [];
     reportData.bundles.forEach(b => {
         b.dependencies.forEach(d => {
+            const key = b.name + '→' + d.bundle_name;
+            const cross = crossLookup[key];
             allDeps.push({
                 from_bundle: b.name,
                 from_group: b.group,
                 to_bundle: d.bundle_name,
                 is_remote_from: b.is_remote,
-                is_cross: crossDeps.some(c => c.from_bundle === b.name && c.to_bundle === d.bundle_name),
+                is_cross: !!cross,
+                asset_dependencies: cross ? (cross.asset_dependencies || []) : (d.asset_dependencies || []),
             });
         });
     });
@@ -233,17 +239,28 @@ function renderDependencies() {
                     <th>From Group</th>
                     <th>Depends On</th>
                     <th>Type</th>
+                    <th>Assets</th>
                 </tr>
             </thead>
             <tbody>
-                ${allDeps.map(d => `
+                ${allDeps.map((d, i) => {
+                    const assetList = d.asset_dependencies.length > 0
+                        ? `<div class="bundle-list asset-dep-list" id="asset-deps-${i}" style="display:none">${d.asset_dependencies.map(a =>
+                            `<div style="padding:2px 0"><span style="color:var(--accent)">${shortAssetPath(a.root_asset)}</span> <span class="warning-arrow">→</span> <span style="color:var(--orange)">${shortAssetPath(a.dependency_asset)}</span></div>`
+                          ).join('')}</div>`
+                        : '';
+                    const toggleBtn = d.asset_dependencies.length > 0
+                        ? `<a href="#" onclick="event.preventDefault();toggleAssetDeps(${i})" style="color:var(--accent);font-size:12px">${d.asset_dependencies.length} asset(s)</a>`
+                        : '<span style="color:var(--text-dim);font-size:12px">-</span>';
+                    return `
                     <tr class="dep-row ${d.is_cross ? 'dep-cross' : ''}" data-search="${(d.from_bundle+d.to_bundle+d.from_group).toLowerCase()}" data-cross="${d.is_cross}">
                         <td>${shortName(d.from_bundle)}</td>
                         <td>${d.from_group}</td>
                         <td>${shortName(d.to_bundle)}</td>
                         <td>${d.is_cross ? '<span class="tag tag-danger">Remote-Remote</span>' : '<span class="tag">Normal</span>'}</td>
-                    </tr>
-                `).join('')}
+                        <td>${toggleBtn}${assetList}</td>
+                    </tr>`;
+                }).join('')}
             </tbody>
         </table>
     `;
@@ -490,6 +507,18 @@ function formatBytes(bytes) {
 function shortName(name) {
     // Remove hash suffix from bundle names like "remotebullseyeleague_assets_all_b4533ab43b983dbb3ac83e27257adb5a.bundle"
     return name.replace(/_[a-f0-9]{32}\.bundle$/, '.bundle').replace(/\.bundle$/, '');
+}
+
+function shortAssetPath(path) {
+    if (!path) return '?';
+    // Show last 2 segments: "Sprites/Atlasses/HomeAtlas.spriteatlasv2" → "Atlasses/HomeAtlas.spriteatlasv2"
+    const parts = path.split('/');
+    return parts.length > 2 ? parts.slice(-2).join('/') : path;
+}
+
+function toggleAssetDeps(index) {
+    const el = document.getElementById('asset-deps-' + index);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 function severityClass(count) {

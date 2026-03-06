@@ -67,9 +67,18 @@ def _resolve_bundle(rid_map, bundle_rid):
         dep_entry = rid_map.get(dep_bundle_rid, {})
         dep_data = dep_entry.get("data", {})
         if dep_data:
+            asset_deps = []
+            for ad in dep.get("AssetDependencies", []):
+                root_data = rid_map.get(ad["rootAsset"]["rid"], {}).get("data", {})
+                dep_asset_data = rid_map.get(ad["dependencyAsset"]["rid"], {}).get("data", {})
+                asset_deps.append({
+                    "root_asset": root_data.get("AssetPath", ""),
+                    "dependency_asset": dep_asset_data.get("AssetPath", ""),
+                })
             dependencies.append({
                 "bundle_name": dep_data.get("Name", ""),
                 "efficiency": dep.get("Efficiency", 0),
+                "asset_dependencies": asset_deps,
             })
 
     load_path = data.get("LoadPath", "")
