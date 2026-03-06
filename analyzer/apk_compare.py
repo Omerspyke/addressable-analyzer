@@ -1,4 +1,5 @@
 import os
+import re
 import zipfile
 
 
@@ -13,6 +14,9 @@ CATEGORIES = {
     "AndroidManifest.xml": "Manifest",
 }
 
+# Pattern to match bundle hash: _<32 hex chars>.bundle
+_BUNDLE_HASH_RE = re.compile(r'_[a-f0-9]{32}\.bundle$')
+
 
 def compare_apks(old_path, new_path):
     old_files = _read_zip(old_path)
@@ -21,17 +25,23 @@ def compare_apks(old_path, new_path):
     old_total = sum(old_files.values())
     new_total = sum(new_files.values())
 
-    all_names = sorted(set(old_files) | set(new_files))
+    # Normalize bundle names (strip hash) to match across builds
+    old_normalized = {_normalize_name(k): k for k in old_files}
+    new_normalized = {_normalize_name(k): k for k in new_files}
 
-    # Per-file diff
+    all_keys = sorted(set(old_normalized) | set(new_normalized))
+
     changes = []
-    for name in all_names:
-        old_size = old_files.get(name, 0)
-        new_size = new_files.get(name, 0)
+    for key in all_keys:
+        old_real = old_normalized.get(key)
+        new_real = new_normalized.get(key)
+        old_size = old_files.get(old_real, 0) if old_real else 0
+        new_size = new_files.get(new_real, 0) if new_real else 0
         delta = new_size - old_size
-        if old_size == 0:
+
+        if not old_real:
             status = "added"
-        elif new_size == 0:
+        elif not new_real:
             status = "removed"
         elif delta != 0:
             status = "changed"
@@ -39,25 +49,29 @@ def compare_apks(old_path, new_path):
             status = "unchanged"
 
         if status != "unchanged":
+            display_name = new_real or old_real
             changes.append({
-                "name": name,
+                "name": display_name,
+                "display_name": key,
                 "old_size": old_size,
                 "new_size": new_size,
                 "delta": delta,
                 "status": status,
-                "category": _categorize(name),
+                "category": _categorize(key),
             })
 
     changes.sort(key=lambda c: abs(c["delta"]), reverse=True)
 
     # Category summary
     categories = {}
-    for name in all_names:
-        cat = _categorize(name)
+    for key in all_keys:
+        cat = _categorize(key)
         if cat not in categories:
             categories[cat] = {"old_size": 0, "new_size": 0}
-        categories[cat]["old_size"] += old_files.get(name, 0)
-        categories[cat]["new_size"] += new_files.get(name, 0)
+        old_real = old_normalized.get(key)
+        new_real = new_normalized.get(key)
+        categories[cat]["old_size"] += old_files.get(old_real, 0) if old_real else 0
+        categories[cat]["new_size"] += new_files.get(new_real, 0) if new_real else 0
 
     category_summary = []
     for cat, sizes in sorted(categories.items(), key=lambda x: abs(x[1]["new_size"] - x[1]["old_size"]), reverse=True):
@@ -91,6 +105,11 @@ def _read_zip(path):
             if not info.is_dir():
                 files[info.filename] = info.file_size
     return files
+
+
+def _normalize_name(name):
+    """Strip bundle hash so same bundle matches across builds."""
+    return _BUNDLE_HASH_RE.sub('.bundle', name)
 
 
 def _categorize(name):

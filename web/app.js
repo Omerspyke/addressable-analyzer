@@ -601,8 +601,8 @@ function renderApkResult(data) {
                     const statusTag = c.status === 'added' ? '<span class="tag tag-remote">NEW</span>'
                         : c.status === 'removed' ? '<span class="tag tag-danger">REMOVED</span>'
                         : '<span class="tag">CHANGED</span>';
-                    return `<tr class="apk-row" data-search="${c.name.toLowerCase()}" data-status="${c.status}" data-delta="${Math.abs(c.delta)}">
-                        <td style="font-size:12px;word-break:break-all">${c.name}</td>
+                    return `<tr class="apk-row" data-search="${(c.display_name || c.name).toLowerCase()}" data-status="${c.status}" data-delta="${Math.abs(c.delta)}">
+                        <td style="font-size:12px;word-break:break-all">${c.display_name || c.name}</td>
                         <td style="font-size:12px">${c.category}</td>
                         <td data-sort="${c.old_size}">${formatBytes(c.old_size)}</td>
                         <td data-sort="${c.new_size}">${formatBytes(c.new_size)}</td>
