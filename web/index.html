@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Addressable Analyzer</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>Addressable Analyzer</h1>
+            <span id="project-name" class="badge"></span>
+            <span id="build-target" class="badge"></span>
+        </div>
+        <div class="header-right">
+            <span id="build-info" class="build-info"></span>
+            <button id="reload-btn" onclick="reloadReport()">Reload</button>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="duplicates">Duplicates</button>
+        <button class="tab" data-tab="dependencies">Dependencies</button>
+        <button class="tab" data-tab="sizes">Bundle Sizes</button>
+        <button class="tab" data-tab="diff">Build Diff</button>
+    </nav>
+
+    <main>
+        <section id="tab-dashboard" class="tab-content active"></section>
+        <section id="tab-duplicates" class="tab-content"></section>
+        <section id="tab-dependencies" class="tab-content"></section>
+        <section id="tab-sizes" class="tab-content"></section>
+        <section id="tab-diff" class="tab-content"></section>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>
