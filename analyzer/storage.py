@@ -60,6 +60,10 @@ def import_build_reports(config):
             filepath = os.path.join(reports_dir, filename)
             try:
                 report = generate_report(parse_build_layout(filepath))
+                # Skip editor/standalone builds — only import mobile targets
+                target = report.get("build_target", "")
+                if "Standalone" in target:
+                    continue
                 report["project_name"] = config["project_name"]
                 result = save_report(report, config)
                 if result is not None:
