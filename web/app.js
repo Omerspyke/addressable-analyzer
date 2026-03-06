@@ -24,6 +24,7 @@ async function loadReport() {
     reportData = await resp.json();
     renderHeader();
     renderDashboard();
+    renderWarnings();
     renderDuplicates();
     renderDependencies();
     renderSizes();
@@ -83,6 +84,11 @@ function renderDashboard() {
                 <div class="card-value ${s.cross_dependency_count > 0 ? 'severity-medium' : ''}">${s.cross_dependency_count}</div>
                 <div class="card-sub">Remote-to-Remote</div>
             </div>
+            <div class="card">
+                <div class="card-label">Warnings</div>
+                <div class="card-value ${(s.warning_high || 0) > 0 ? 'severity-high' : (s.warning_medium || 0) > 0 ? 'severity-medium' : ''}">${s.warning_count || 0}</div>
+                <div class="card-sub">${s.warning_high || 0} high / ${s.warning_medium || 0} medium</div>
+            </div>
         </div>
         <h3 style="margin-bottom:12px; font-size:14px;">Top 10 Largest Bundles</h3>
         <table>
@@ -98,6 +104,62 @@ function renderDashboard() {
                 `).join('')}
             </tbody>
         </table>
+    `;
+}
+
+// === WARNINGS ===
+function renderWarnings() {
+    const el = document.getElementById('tab-warnings');
+    const warnings = reportData.warnings || [];
+
+    // Update tab badge
+    const tabBtn = document.getElementById('warnings-tab');
+    if (warnings.length > 0) {
+        tabBtn.innerHTML = `Warnings <span class="tab-badge">${warnings.length}</span>`;
+    }
+
+    if (warnings.length === 0) {
+        el.innerHTML = '<div class="empty-state"><p>No dependency warnings found.</p></div>';
+        return;
+    }
+
+    const highWarnings = warnings.filter(w => w.severity === 'high');
+    const mediumWarnings = warnings.filter(w => w.severity === 'medium');
+
+    let html = '';
+
+    if (highWarnings.length > 0) {
+        html += `<h3 style="margin-bottom:16px; color:var(--red);">High Severity (${highWarnings.length})</h3>`;
+        html += `<p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">Remote bundles depending on other remote bundles. When downloaded concurrently during event warm-up, this causes cache race conditions and "Couldn't move cache data" crashes.</p>`;
+        highWarnings.forEach(w => { html += renderWarningCard(w); });
+    }
+
+    if (mediumWarnings.length > 0) {
+        html += `<h3 style="margin: 24px 0 16px; color:var(--orange);">Medium Severity (${mediumWarnings.length})</h3>`;
+        html += `<p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">Local bundles depending on remote bundles. The local bundle cannot load until the remote dependency is downloaded, defeating the purpose of being bundled locally.</p>`;
+        mediumWarnings.forEach(w => { html += renderWarningCard(w); });
+    }
+
+    el.innerHTML = html;
+}
+
+function renderWarningCard(w) {
+    return `
+        <div class="warning-card warning-${w.severity}">
+            <div class="warning-header">
+                <div class="warning-title">
+                    <span class="warning-badge warning-badge-${w.severity}">${w.severity}</span>
+                    ${w.title}
+                </div>
+                <span class="warning-count">${w.count} bundle-level dependenc${w.count === 1 ? 'y' : 'ies'}</span>
+            </div>
+            <div class="warning-desc">${w.description}</div>
+            <div class="warning-detail">
+                <span class="tag ${w.type === 'local_to_remote' ? 'tag-local' : 'tag-remote'}">${w.from_group}</span>
+                <span class="warning-arrow">&rarr;</span>
+                <span class="tag tag-remote">${w.to_group}</span>
+            </div>
+        </div>
     `;
 }
 
